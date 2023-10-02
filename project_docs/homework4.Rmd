@@ -1,0 +1,282 @@
+---
+title: "36-613 Homework 4, Fall 2023"
+author: 
+- "Vinay Maruri"
+- 'Style Guide: Tidyverse'
+date: "Due Thursday, Sept 28th, 2023 (11:59 PM EDT) on Gradescope"
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    code_folding: show
+    toc: yes
+    toc_float: yes
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Problem 1: Final Project Prep (40pts)
+
+The goal of this problem is to help your team get started on your final project for this class. __You should work on this problem as a group, but then complete the rest of the assignment individually__.
+
+a. (10pts) To help structure your report, you are required to come up with at least three interesting, overarching questions for your dataset that are relevant for your 36-611 RFI. For this part, all you have to do is come up with three potential research questions of interest and list them here:
+
+**What is a reliable financial market indicator of a healthy company?**
+
+**What sectors are more likely to hire full-time employees now?**
+
+**Are the amount of jobs that a company is hiring for associated with its financial health?**
+
+b. (20pts) For this part, describe a plot you can make for each of the three research questions and a write a few sentences justifying why you think your plot choice is appropriate for the research question. To make you think more creatively about these potential plots, __you must describe making a different type of plot for each research question__ (e.g., you can NOT say that you'll make a histogram for all three questions!) .
+
+**For reliable financial market indicators of a healthy company, we would want to see a consistent relationship/trend over time that does not degenerate or break and that the company survived for the next period/into the future. To do this, we would want to graph a time series of a financial market indicator for many companies and overlay whether or not that company stayed in business in the next quarter. A way to do this would be to create a time series scatterplot of price/earnings ratio for Fortune 500 companies with points on the plot categorized by whether or not they survived in the next quarter denoted by different shapes or colors. This graph should result in clusters of companies that were healthy and survived in the next quarter and clusters of companies that were unhealthy and failed in the next quarters, thus reliably identifying healthy companies. This clustering analysis would be similar to what I did in Problems 2 and 3 of this homework.**
+
+**A plot that would be appropriate to answer the second question would be a bar chart with proportions that represent the relative amount of jobs being hired amongst the different sectors. With standard errors, this plot would enable us to do inference on whether the amount of available jobs by sector varies. This directly would answer the question about what sectors are more likely to hire full-time employees now because we would be able to find potential differences from this plot.**
+
+**A plot that would address the third question would be a correlogram between the amount of jobs that a company is hiring for and a selected measure of financial health, say its price/earnings ratio. If this plot shows a strong relationship, then we can say that the amount of jobs that a company is hiring for is associated with its financial health, and if there is not a strong relationship, then we can say that the two are not associated. Because pairwise correlations are a reasonable first order measure of association, this plot is appropriate to establish that a relationship exists. **
+
+c. (10pts) Create one of your plots described in part b! For this part, all you need to do is turn in your graph - you do NOT need to write an interpretation of the plot. __Make sure it is labeled appropriately.__ 
+
+I am electing to make the second graph that I described in part b. To make my graph, I need to do a bit of data work, namely to match the LinkedIn job_postings dataset to the LinkedIn company industries dataset. 
+
+```{r}
+job_postings <- read.csv("~/data_viz/job_postings.csv")
+comp_industries <- read.csv("~/data_viz/company_details/company_industries.csv")
+merged_df <- plyr::join(job_postings, comp_industries,
+  by = "company_id", type = "left",
+  match = "first"
+)
+```
+
+Turns out there are 142 categories, this is too many to plot. Let's keep only the top 20 industries (which happen to be more than 153 job postings in a category).
+
+```{r}
+library(dplyr)
+library(ggplot2)
+```
+
+
+```{r}
+plt_extra <- merged_df %>%
+  group_by(industry) %>%
+  summarize(count = n(), .groups = "drop") %>%
+  mutate(
+    total = sum(count),
+    prop = count / total,
+    se = sqrt(prop * (1 - prop) / total),
+    lower = prop - 2 * se,
+    upper = prop + 2 * se
+  ) %>%
+  filter(count >= 153 & industry != "NA") %>%
+  ggplot(aes(x = industry)) +
+  geom_bar(aes(y = prop),
+    stat = "identity"
+  ) +
+  geom_errorbar(
+    aes(
+      ymin = lower,
+      ymax = upper
+    ),
+    color = "red"
+  ) +
+  labs(
+    x = "Company Industry", y = "Proportion of Available Jobs in that Industry",
+    title = "Available Jobs on LinkedIn by Industry"
+  ) +
+  coord_flip()
+plt_extra
+```
+
+## Problem 2: Olympic Regression (25pts)
+
+For this problem you'll work with a dataset curated via the [#TidyTuesday project](https://github.com/rfordatascience/tidytuesday/blob/master/data/2021/2021-07-27/readme.md) containing information about Olympic athletes. The following code reads in the dataset and filters it to just include USA athletes, selecting a subset of the columns, and tidies up medal columns you will use in this problem:
+
+```{r}
+library(tidyverse)
+usa_olympics <- read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-07-27/olympics.csv") %>%
+  filter(team == "United States") %>%
+  dplyr::select(-team, -noc) %>%
+  mutate(
+    won_medal = as.numeric(!is.na(medal)),
+    medal = ifelse(is.na(medal), "None", medal)
+  )
+```
+
+The dataset contains information on the performance of USA Olympic athletes. Each row corresponds to a unique athlete-event combination for a particular year (there are 17,847 in total). This means that athletes are repeated throughout the dataset but we will ignore that detail for this problem. We have information about the athlete such as their height, weight, age, and sex. We also have info about the Olympics event they competed in, including the year, season, and the event outcome for the athlete in terms of their medal placement (if any). You will focus on the following variables for this problem:
+
++ `year`: The year that the Olympics occurred.
++ `season`: Type of Olympics, Summer or Winter.
++ `height`: Athlete height in cm.
++ `sex`: Athlete's reported sex.
+
+a. (10pts) For this part, using the `usa_olympics` dataset, make a graph that does the following:
+
++ Displays `year` on the x-axis and `height` on the y-axis. (Make sure your plot avoids over-plotting...)
+
++ Displays the *linear trend* between `year` and `height`. Display a 99% confidence interval when doing this.
+
++ Be sure that your graph has appropriate labels.
+
+```{r}
+plt1 <- ggplot(data = usa_olympics, mapping = aes(x = year, y = height)) +
+  geom_point(alpha = 0.2) +
+  geom_smooth(method = "lm", se = TRUE, level = 0.99) +
+  labs(x = "Year", y = "Height (cm)", 
+       title = "American Olympic athlete heights by year")
+plt1
+```
+
+Then answer the following the questions:
+
++ Describe the relationship you observe between the `height` and `year` based on the displayed regression line.
+
+Based on the displayed regression line, the observed relationship between `height` and `year` is one that is negatively correlated. As `year` increases, the average height of American Olympic athletes has decreased. 
+
++ Do any of the assumptions we make for linear regression appear to be violated based on your plot? (You do NOT need to turn in a residual versus fit plot to answer this question.)
+
+The assumption that we make about homoscedastic residuals appears to be violated in my plot. I see that the spread of the height data around the regression line increases as the year increases, which makes me suspect that the residuals have non-constant variance. 
+
+b. (5pts) For this part, make a graph that does the following:
+
++ Displays `year` on the x-axis, `height` on the y-axis, and color by `sex`. (Again, avoid over-plotting...)
+
++ Displays the *linear trend* between `year` and `height` with separate lines by `sex` mapped via color. Display a 99% confidence interval when doing this.
+
++ Be sure that your graph has appropriate labels.
+
+For this part, you only have to turn in the graph.
+
+```{r}
+plt2 <- ggplot(data = usa_olympics, mapping = aes(x = year, y = height)) +
+  geom_point(aes(color = sex), alpha = 0.2) +
+  geom_smooth(aes(fill = sex), method = "lm", se = TRUE, level = 0.99) +
+  labs(
+    x = "Year", y = "Height (cm)",
+    title = "American Olympic athlete heights by year and gender"
+  )
+plt2
+```
+
+c. (5pts) Do you observe a similar or different relationship between `height` and `year` for your lines in part (b) compared to part (a)? State if they are similar or different, and explain in 1-2 sentences. 
+
+I observe a different relationship between `height` and `year` for my lines in part (b) compared to part (a). Instead of `height` and `year` being negatively correlated, my part (b) lines show that `height` and `year` are positively correlated. This occurred because including `sex` in our analysis resolved an unexplained confounding factor in the relationship between `height` and `year` that allowed us to get closer to the true relationship between `height` and `year` by allowing us to see separate trends for height within the `sex` groups. 
+
+d. (5pts): Are the intercepts meaningful in this context? Would you feel comfortable using this regression model to predict USA Olympic athlete height in the year 3005? Explain in a few sentences.
+
+Intercepts are not meaningful in this context. This is because the y-intercept would be the average American Olympic athlete height at year 0. This is an illogical point to consider since the Olympics did not exist in year 0, thus there is not a average American Olympic athlete to even consider at that point, let alone extrapolate it from a regression. For this same reason, I would not be comfortable using this regression to predict USA Olympic athlete height in the year 3005. The Olympics has not been held yet in the year 3005 and may not even exist at that point. Thus, there may not be the concept of an average American Olympic athlete height to even consider. Furthermore, we don't have sufficient information in our data about the future to make a comfortable prediction about USA Olympic athlete heights in the year 3005. The trends that we observe in this historical data are not guaranteed to continue moving forward and could possibly reverse if some factors about the world changed like food/nutrient availability or water availability [both of which could affect an athlete's possible height since those are components used by the body in adolescence to develop the body's structures]. 
+
+
+## Problem 3: Contour Plots and Heat Maps (35 points)
+
+In this problem, we will use a dataset on students' academic performance, found here:
+
+```{r}
+student_data <- read_csv("https://raw.githubusercontent.com/ryurko/DataViz-36613-Fall23/main/data/students.csv")
+```
+
+Details about the dataset are found [here](https://www.kaggle.com/aljarah/xAPI-Edu-Data). However, the main things you need to know about this dataset are:
+
++ Students' `Grade` is classified as Low (L), Medium (M), or High (H).
++ Covariates: There are 15 variables on student characteristics and behaviors, 4 of which are quantitative.
+
+a. (10pts) For this part, do the following:
+
++ Create a scatterplot of `RaisedHands` and `VisitedResources` (make sure to set `alpha` < 1) with contour lines added using `geom_density2d()`.
+
+```{r}
+plt3 <- ggplot(data = student_data, mapping = aes(x = RaisedHands, y = VisitedResources)) +
+  geom_point(alpha = 0.3) +
+  geom_density2d() +
+  labs(
+    x = "Raised Hands (Number of times)", y = "Visited Resources (Number of times)",
+    title = "Hands raised in class vs visiting content"
+  )
+plt3
+```
+
++ In class we discussed how contour lines use two bandwidths; `geom_density2d()` estimates these bandwidths by default. Now, copy-and-paste your above code, but make the bandwidth smaller by setting `h = c(10, 10)` within `geom_density2d()`.
+
+```{r}
+plt4 <- ggplot(data = student_data, mapping = aes(x = RaisedHands, y = VisitedResources)) +
+  geom_point(alpha = 0.3) +
+  geom_density2d(h = c(10, 10)) +
+  labs(
+    x = "Raised Hands (Number of times)", y = "Visited Resources (Number of times)",
+    title = "Hands raised in class vs visiting content"
+  )
+plt4
+```
+
++ Compare and contrast the two plots in 1-3 sentences.
+
+Both of the plots generally show that there are two main clusters of students: one that raises their hand in class and visits LMS resources a lot, and another that doesn't frequently raise their hand in class and doesn't freqently visit LMS resources. Where they differ is in how they draw the contour plots, as that is what changed between the two graphs going from a larger bandwidth to a smaller one. The small bandwidth plot identifies many more clusters of points of students and has more contour lines overall than the larger bandwidth plot that only identifies two main clusters of points of students and has fewer contour lines.
+
+b. (15pts) Similar to Part A, again make a scatterplot of `RaisedHands` and `VisitedResources` with contour lines, but with the following changes:
+
++ Make the bandwidth of the contour lines larger by setting `h = c(80, 80)` within `geom_density2d()`
++ Set the color of the points according to `Grade` and the shape of the points according to `Gender`.
+
+```{r}
+plt5 <- ggplot(data = student_data, mapping = aes(x = RaisedHands, y = VisitedResources)) +
+  geom_point(aes(color = Grade, shape = Gender), alpha = 0.5) +
+  geom_density2d(h = c(80, 80)) +
+  labs(
+    x = "Raised Hands (Number of times)", y = "Visited Resources (Number of times)",
+    title = "Hands raised in class vs visiting content by grade and gender"
+  )
+plt5
+```
+
+After you've made your plot, answer the following two questions:
+
++ How many modes are there in the scatterplot? In your answer, also characterize/describe each mode in terms of `RaisedHands` and `VisitedResources`.
+
+There are 2 modes in the scatterplot. The first mode is in the upper right hand of the graph for high values of `RaisedHands` and `VisitedResources`, representing students that put in more effort by raising their hands and using the resources more often. The second mode is in the bottom left corner of the graph for low values of `RaisedHands` and `VisitedResources`, representing students who put in less effort by not raising their hands and using the resources often.
+
++ In 1-3 sentences, characterize/describe each mode in terms of `Grade` and `Gender`.
+
+The mode in the upper right hand corner for high values of `RaisedHands` and `VisitedResources` appears to be mostly populated by students that earned medium and high grades (and thus are performing well). This intuitively makes sense because students that put in more effort (by raising their hand to ask questions and using the LMS resources more often) should understand the material more deeply and perform better. There does not appear to be a clear association for what gender populates this mode, as I can't tell from this graph whether male or female students are more present in this mode. 
+
+The mode in the bottom left hand corner for low values of `RaisedHands` and `VisitedResources` appears to be mostly populated by students that earned low and medium grades (and thus are performing poorly). This makes sense because students that put in less effort will not understand the material as well and will perform worse. There does not appear to be a clear association for what gender populates this mode, as I can't tell from this graph whether male or female students are more present in this mode. 
+
+
+c. (10pts) For this part, you'll have to make two different heat maps (and all you'll need to do is turn in the two graphs). Please do the following:
+
++ Make a heat map of `RaisedHands` and `VisitedResources` with points added but no contour lines (using the default bandwidth) with `stat_density2d`. Furthermore, change the default colors using `scale_fill_gradient()` and setting the `low` and `high` arguments in that function. Be sure that you use `geom_point()` *after* you use `stat_density2d` (otherwise, you won't be able to see the points).
+
+```{r}
+plt6 <- ggplot(data = student_data, mapping = aes(x = RaisedHands, y = VisitedResources)) +
+  stat_density2d(aes(fill = after_stat(level)), geom = "polygon") +
+  geom_point(alpha = 0.5) +
+  coord_fixed() +
+  scale_fill_gradient(low = "red", high = "green") +
+  theme_bw() +
+  labs(
+    x = "Raised Hands (Number of times)", y = "Visited Resources (Number of times)",
+    title = "Hands raised in class vs visiting content by grade and gender"
+  )
+plt6
+```
+
++ Make a hexagonal heatmap of `RaisedHands` and `VisitedResources`, but this time use `scale_fill_gradient2()`. Within `scale_fill_gradient2()`, specify a "medium count" color using the `mid` argument (similar to the `low` and `high` arguments). Within `scale_fill_gradient2()`, there is an argument called `midpoint` that specifies what a "medium density" is. The default is 0, which doesn't make sense for densities, because 0 is the lowest possible value for densities. So, experiment and set `midpoint` equal to a non-zero number that you think makes sense given the range of counts observed in your hexagonal bins. 
+
+```{r}
+plt7 <- ggplot(data = student_data, mapping = aes(x = RaisedHands, y = VisitedResources)) +
+  geom_hex() +
+  coord_fixed() +
+  scale_fill_gradient2(low = "lightblue", mid = "forestgreen", high = "orange", midpoint = 4) +
+  theme_bw() +
+  labs(
+    x = "Raised Hands (Number of times)", y = "Visited Resources (Number of times)",
+    title = "Hands raised in class vs visiting content by grade and gender"
+  )
+plt7
+```
+
+**Hint**: For the `midpoint` argument, your graph should be a gradient of three different colors that you've specified. If this isn't the case, you may have specified `midpoint` poorly.
+
+You should end up with a hexagonal heat map that has a mix of three colors throughout it. __Honestly, you should be careful when making visualizations based on three colors in the display.__ For the purpose of a density heat map, you should only focus on low to high changes in color. But now you know how to modify the color gradient to include a middle point cutoff for future reference.
