@@ -5,6 +5,19 @@
 
 library(tidyverse)
 library(tidyquant)
+library(Quandl)
+
+
+
+msft <- tq_get("MSFT", "stock.prices", from = "2023-09-01",to = "2023-10-02")
+
+
+
+
+
+
+
+
 
 
 #grab a bunch of data. 
@@ -22,7 +35,7 @@ combined <- combined %>% distinct(symbol, company, identifier, sedol, sector, lo
 
 
 stocks.prices <- combined$symbol %>% 
-  tq_get(get  = "stock.prices",from = "2000-01-01",to = "2023-10-02") %>%
+  tq_get(get  = "stock.prices",from = "2023-09-01",to = "2023-10-02") %>%
   group_by(symbol)
 
 financials.values <- combined$symbol %>% 
@@ -32,3 +45,11 @@ financials.values <- combined$symbol %>%
 key.ratios <- combined$symbol %>% 
   tq_get(get  = "key.ratios",from = "2000-01-01",to = "2023-10-02") %>%
   group_by(symbol)
+
+dividends <- combined$symbol %>% 
+  tq_get(get  = "dividends",from = "2000-01-01",to = "2023-10-02") %>%
+  group_by(symbol)
+
+write.csv(stocks.prices, "stock_prices.csv")
+write.csv(financials.values, "financials.csv")
+write.csv(key.ratios, "key_ratios.csv")
