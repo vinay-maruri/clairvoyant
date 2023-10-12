@@ -1,0 +1,120 @@
+---
+title: "amd_visualizations"
+author: "Divya Rao"
+date: "2023-10-09"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+# data from https://www.macrotrends.net/stocks/charts/AMD/amd/financial-ratios
+data <- data.frame(
+  Year = c(2022, 2021, 2020, 2019, 2018),
+  Annual_Revenue = c(23601, 16434, 9763, 6731, 6475),
+  Gross_Profit = c(10603, 7929, 4347, 2868, 2447),
+  Net_Income = c(1320, 3162, 2490, 341, 337)
+)
+
+library(ggplot2)
+library(reshape2)
+melted_data <- melt(data, id.vars = "Year")
+
+# Create a line chart
+ggplot(data = melted_data, aes(x = Year, y = value, color = variable, group = variable)) +
+  geom_line(size = 1) +
+  geom_point(size = 3) +
+  labs(title = "AMD Financial Overview",
+       x = "Year",
+       y = "Millions of US $",
+       color = "Metric") +
+  theme_minimal()
+```
+
+
+
+```{r}
+library(openxlsx)
+library(ggplot2)
+data <- read.xlsx("./data/AMD-stock trading data.xlsx")
+data$Date <- as.Date(data$Date, origin = "1899-12-30")
+ggplot(na.omit(data), aes(x = Date)) +
+  geom_line(aes(y = `Last.Price`), size = 1) +
+  labs(title = "AMD Stock Data", y = "Value", x = "Date", color = "Legend") +
+  scale_fill_manual(values = c("Last Price" = "blue")) +
+  theme_minimal()
+
+```
+```{r,fig.height=6}
+library(tidyr)
+library(ggplot2)
+library(dplyr)
+library(zoo)  # for na.locf function
+
+# Assuming your data is in a dataframe named 'data_amd'
+data_amd <- read.xlsx("./data/AMD-market share dollars.xlsx")
+
+data_amd <- data_amd %>% select(-c(Ticker, Field.ID, Field.Mnemonic, Data.State))
+data_amd_long <- data_amd %>%
+    gather(key = "Quarter", value = "Value", -Description)
+
+data_amd_long <- data_amd_long %>% filter(!is.na(Value))
+data_amd_long <- data_amd_long %>% filter(Quarter >= "2021.Q1")
+
+# Create a new column to identify product category based on Description
+data_amd_long$Category <- ifelse(grepl("^\\s+", data_amd_long$Description), NA, data_amd_long$Description)
+data_amd_long$Category <- na.locf(data_amd_long$Category)
+
+# Plot
+amd_plot <- ggplot(data_amd_long, aes(x = Quarter, y = Value, fill = Description, group = Description)) +
+    geom_bar(stat = "identity", position = "dodge") +
+    labs(title = "Market Share Over Quarters", x = "Quarter", y = "Value") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    facet_wrap(~ Category, scales = "free_y", ncol = 1)  # Separate plots for each product category
+
+print(amd_plot)
+```
+
+
+```{r}
+library(tidyr)
+library(ggplot2)
+library(dplyr)
+library(zoo)  # for na.locf function
+
+# Assuming your data is in a dataframe named 'data_amd'
+data_amd <- read.xlsx("./data/AMD-market share dollars.xlsx")
+
+data_amd <- data_amd %>% select(-c(Ticker, Field.ID, Field.Mnemonic, Data.State))
+data_amd_long <- data_amd %>%
+    gather(key = "Quarter", value = "Value", -Description)
+
+data_amd_long <- data_amd_long %>% filter(!is.na(Value))
+data_amd_long <- data_amd_long %>% filter(Quarter >= "2021.Q1")
+
+# Create a new column to identify product category based on Description
+data_amd_long$Category <- ifelse(grepl("^\\s+", data_amd_long$Description), NA, data_amd_long$Description)
+data_amd_long$Category <- na.locf(data_amd_long$Category)
+
+# List of unique categories
+categories <- unique(data_amd_long$Category)
+
+# Generate a separate plot for each category using a for loop
+for(cat in categories) {
+    cat_data <- data_amd_long %>% filter(Category == cat)
+    
+    plot_title <- paste("Market Share Over Quarters for", cat)
+    p <- ggplot(cat_data, aes(x = Quarter, y = Value, fill = Description, group = Description)) +
+        geom_bar(stat = "identity", position = "dodge") +
+        labs(title = plot_title, x = "Quarter", y = "Value") +
+        theme_minimal() +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1))
+    
+    print(p)
+}
+
+```
