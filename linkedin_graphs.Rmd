@@ -1,0 +1,111 @@
+---
+title: "linkedin_graphs"
+author: "Vinay Maruri"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+linkedin_df <- read.csv("~/clairvoyant/merged_linkedin.csv")
+```
+
+#Now we need to add on information about the number of social media followers that they have. 
+
+```{r}
+companies <- read.csv("~/clairvoyant/company_details/employee_counts.csv")
+
+
+test_df <- merge(linkedin_df, companies, by = "company_id")
+```
+
+
+```{r}
+regression_panel <- test_df %>% group_by(company_id) %>% summarise(num_jobs = n(), hq_state = state, social_followers = follower_count, company_size = employee_count.x, industry = industry)
+
+regression_panel <- unique(regression_panel)
+regression_panel <- regression_panel %>% group_by(company_id) %>% filter(row_number(company_id) == 1)
+corrected_states <- state.abb[match(regression_panel$hq_state,state.name)]
+regression_panel$corrected_states <- corrected_states
+regression_panel$hq_state <- ifelse(is.na(regression_panel$corrected_states), regression_panel$hq_state, regression_panel$corrected_states)
+
+regression_panel <- subset(regression_panel, nchar(hq_state) == 2)
+
+regression_panel <- subset(regression_panel, select = -c(7))
+write.csv(regression_panel, "~/clairvoyant/regression_panel.csv")
+```
+
+
+```{r}
+summary(linkedin_df)
+```
+
+```{r}
+library(vtable)
+
+sumtable(data = linkedin_df, vars = c("company_id", "job_id", "max_salary", "med_salary", "min_salary", "pay_period", "formatted_work_type", "applies", "remote_allowed", "views", "application_type", "sponsored", "work_type", "compensation_type", "currency", "industry_id", "company_size", "inferred", "employee_count"))
+```
+
+
+MAP OF LINKEDIN JOBS IN US
+
+
+```{r}
+library(ggmap)
+library(tmaptools)
+
+# linkedin_df <- read.csv("~/clairvoyant/merged_linkedin.csv")
+
+# linkedin_df <- linkedin_df %>%
+#  group_by(location) %>%
+#  summarize(cnt = n())
+
+# linkedin_df <- linkedin_df[c(1:1020, 1022:1380), ]
+
+# nominatim_loc_geo <- geocode_OSM(linkedin_df$location, details = FALSE, as.data.frame = TRUE)
+
+# linkedin_df <- merge(linkedin_df, nominatim_loc_geo, by.x = "location", by.y = "query")
+# colnames(linkedin_df)[4] <- "long"
+
+# linkedin_df <- filter(linkedin_df, lat < 50 & lat > 25)
+
+# write.csv(linkedin_df, "linkedin_geocoded.csv")
+
+linkedin_df <- read.csv("~/data_viz/linkedin_geocoded.csv")
+```
+
+
+
+```{r}
+us_data <- map_data("state")
+county_data <- map_data("county")
+
+us_county_map <- ggplot() +
+  # this creates all of the counties
+  geom_polygon(aes(long, lat, group = group),
+    fill = "lightgrey", size = 4,
+    data = county_data
+  ) +
+  # this draws outlines for the states
+  geom_polygon(aes(long, lat, group = group),
+    color = "white",
+    fill = NA, data = us_data
+  ) +
+  geom_point(
+    data = linkedin_df,
+    aes(x = long, y = lat, size = sqrt(cnt)), alpha = .25, 
+    colour = "red"
+  ) +
+  scale_size_area(
+    breaks = sqrt(c(1, 5, 10, 50, 200, 500)),
+    labels = c(1, 5, 10, 50, 200, 500),
+    name = "# jobs"
+  ) +
+  theme_bw() +
+  labs(x = "Longitude", y = "Latitude", 
+       title = "Spatial Distribution of LinkedIn Job Postings in the US")
+us_county_map
+```
